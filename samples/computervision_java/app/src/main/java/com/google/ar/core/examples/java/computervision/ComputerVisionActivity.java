@@ -54,6 +54,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import javax.microedition.khronos.egl.EGLConfig;
@@ -505,16 +506,17 @@ public class ComputerVisionActivity extends AppCompatActivity implements GLSurfa
       List<CameraConfig> cameraConfigs = session.getSupportedCameraConfigs(cameraConfigFilter);
       Log.i(TAG, "Size of supported CameraConfigs list is " + cameraConfigs.size());
 
+      List<CameraConfig> distinctResolutionConfigs = getSortedDistinctCameraConfigs(cameraConfigs);
+      if (distinctResolutionConfigs.isEmpty()) {
+        return;
+      }
+
       // Determine the highest and lowest CPU resolutions.
-      cpuLowResolutionCameraConfig =
-          getCameraConfigWithSelectedResolution(
-              cameraConfigs, /*ImageResolution*/ ImageResolution.LOW_RESOLUTION);
+      cpuLowResolutionCameraConfig = distinctResolutionConfigs.get(0);
       cpuMediumResolutionCameraConfig =
-          getCameraConfigWithSelectedResolution(
-              cameraConfigs, /*ImageResolution*/ ImageResolution.MEDIUM_RESOLUTION);
+          distinctResolutionConfigs.get(distinctResolutionConfigs.size() / 2);
       cpuHighResolutionCameraConfig =
-          getCameraConfigWithSelectedResolution(
-              cameraConfigs, /*ImageResolution*/ ImageResolution.HIGH_RESOLUTION);
+          distinctResolutionConfigs.get(distinctResolutionConfigs.size() - 1);
       // Update the radio buttons with the resolution info.
       updateRadioButtonText(
           R.id.radio_low_res, cpuLowResolutionCameraConfig, getString(R.string.label_low_res));
@@ -534,31 +536,39 @@ public class ComputerVisionActivity extends AppCompatActivity implements GLSurfa
     radioButton.setText(prefix + " (" + resolution.getWidth() + "x" + resolution.getHeight() + ")");
   }
 
-  /* Get the CameraConfig with selected resolution. */
-  private static CameraConfig getCameraConfigWithSelectedResolution(
-      List<CameraConfig> cameraConfigs, ImageResolution resolution) {
-    // Take the first three camera configs, if camera configs size are larger than 3.
-    List<CameraConfig> cameraConfigsByResolution =
-        new ArrayList<>(
-            cameraConfigs.subList(0, Math.min(cameraConfigs.size(), 3)));
-    Collections.sort(
-        cameraConfigsByResolution,
-        (CameraConfig p1, CameraConfig p2) ->
-            Integer.compare(p1.getImageSize().getHeight(), p2.getImageSize().getHeight()));
-    CameraConfig cameraConfig = cameraConfigsByResolution.get(0);
-    switch (resolution) {
-      case LOW_RESOLUTION:
-        cameraConfig = cameraConfigsByResolution.get(0);
-        break;
-      case MEDIUM_RESOLUTION:
-        // There are some devices that medium resolution is the same as high resolution.
-        cameraConfig = cameraConfigsByResolution.get(1);
-        break;
-      case HIGH_RESOLUTION:
-        cameraConfig = cameraConfigsByResolution.get(2);
-        break;
+  /* Get sorted distinct CameraConfigs. */
+  private static List<CameraConfig> getSortedDistinctCameraConfigs(
+      List<CameraConfig> cameraConfigs) {
+    if (cameraConfigs.isEmpty()) {
+      return Collections.emptyList();
     }
-    return cameraConfig;
+    // Sort camera configs by resolution area (width * height) ascending.
+    // Use target FPS descending as a secondary tie-breaker for identical resolutions.
+    List<CameraConfig> cameraConfigsByResolution = new ArrayList<>(cameraConfigs);
+    cameraConfigsByResolution.sort(
+        Comparator.comparingInt(
+                (CameraConfig c) -> c.getImageSize().getWidth() * c.getImageSize().getHeight())
+            .thenComparing(
+                Comparator.comparingInt((CameraConfig c) -> c.getFpsRange().getUpper()).reversed())
+            .thenComparing(
+                Comparator.comparingInt((CameraConfig c) -> c.getFpsRange().getLower())
+                    .reversed()));
+
+    // Filter to distinct image resolutions (preserving order from smallest to largest).
+    List<CameraConfig> distinctResolutionConfigs = new ArrayList<>();
+    for (CameraConfig config : cameraConfigsByResolution) {
+      boolean duplicate = false;
+      for (CameraConfig existing : distinctResolutionConfigs) {
+        if (existing.getImageSize().equals(config.getImageSize())) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (!duplicate) {
+        distinctResolutionConfigs.add(config);
+      }
+    }
+    return distinctResolutionConfigs;
   }
 
   private String getCameraIntrinsicsText(Frame frame) {

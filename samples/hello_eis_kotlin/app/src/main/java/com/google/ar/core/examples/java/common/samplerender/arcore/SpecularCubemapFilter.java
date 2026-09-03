@@ -183,7 +183,9 @@ public class SpecularCubemapFilter implements Closeable {
       ldCubemap =
           new Texture(render, Texture.Target.TEXTURE_CUBE_MAP, Texture.WrapMode.CLAMP_TO_EDGE);
 
-      ChunkIterable chunks = new ChunkIterable(getMaxColorAttachments());
+      // Limit to 1 color attachment per chunk pass to avoid Vulkan pipeline creation
+      // failures on GPUs that do not support multiple MRT half-float attachments (e.g. PowerVR).
+      ChunkIterable chunks = new ChunkIterable(min(getMaxColorAttachments(), 1));
       initializeLdCubemap();
       shaders = createShaders(render, chunks);
       framebuffers = createFramebuffers(chunks);
@@ -322,13 +324,13 @@ public class SpecularCubemapFilter implements Closeable {
         GLES30.glTexImage2D(
             GLES30.GL_TEXTURE_CUBE_MAP_POSITIVE_X + face,
             level,
-            GLES30.GL_RGB16F,
-            /*width=*/ mipmapResolution,
-            /*height=*/ mipmapResolution,
-            /*border=*/ 0,
-            GLES30.GL_RGB,
+            GLES30.GL_RGBA16F,
+            /* width= */ mipmapResolution,
+            /* height= */ mipmapResolution,
+            /* border= */ 0,
+            GLES30.GL_RGBA,
             GLES30.GL_HALF_FLOAT,
-            /*data=*/ null);
+            /* data= */ null);
         GLError.maybeThrowGLException("Could not initialize LD cubemap mipmap", "glTexImage2D");
       }
     }

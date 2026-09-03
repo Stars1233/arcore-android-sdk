@@ -94,6 +94,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -405,7 +406,7 @@ public class GeospatialActivity extends AppCompatActivity
     }
     // Check VPS availability before configure and resume session.
     if (session != null) {
-      getLastLocation();
+      getCurrentLocation();
     }
 
     // Note that order matters - see the note in onPause(), the reverse applies here.
@@ -443,23 +444,21 @@ public class GeospatialActivity extends AppCompatActivity
     }
   }
 
-  private void getLastLocation() {
+  private void getCurrentLocation() {
     try {
       fusedLocationClient
-          .getLastLocation()
+          .getCurrentLocation(
+              com.google.android.gms.location.LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY,
+              /* cancellationToken= */ null)
           .addOnSuccessListener(
               new OnSuccessListener<Location>() {
                 @Override
                 public void onSuccess(Location location) {
-                  double latitude = 0;
-                  double longitude = 0;
                   if (location != null) {
-                    latitude = location.getLatitude();
-                    longitude = location.getLongitude();
+                    checkVpsAvailability(location.getLatitude(), location.getLongitude());
                   } else {
-                    Log.e(TAG, "Error location is null");
+                    Log.e(TAG, "Failed to get current location fix: location is null.");
                   }
-                  checkVpsAvailability(latitude, longitude);
                 }
               });
     } catch (SecurityException e) {
@@ -468,12 +467,24 @@ public class GeospatialActivity extends AppCompatActivity
   }
 
   private void checkVpsAvailability(double latitude, double longitude) {
+    Log.i(
+        TAG,
+        String.format(
+            Locale.ROOT, "Checking VPS availability for lat/lng: %.6f, %.6f", latitude, longitude));
     final VpsAvailabilityFuture future =
         session.checkVpsAvailabilityAsync(
             latitude,
             longitude,
             availability -> {
               if (availability != VpsAvailability.AVAILABLE) {
+                Log.e(
+                    TAG,
+                    String.format(
+                        Locale.ROOT,
+                        "VPS is unavailable at lat/lng: %.6f, %.6f (status: %s)",
+                        latitude,
+                        longitude,
+                        availability));
                 showVpsNotAvailabilityNoticeDialog();
               }
             });

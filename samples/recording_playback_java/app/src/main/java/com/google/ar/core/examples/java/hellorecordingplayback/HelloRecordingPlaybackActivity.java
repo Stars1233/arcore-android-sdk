@@ -302,6 +302,20 @@ public class HelloRecordingPlaybackActivity extends AppCompatActivity
   }
 
   @Override
+  protected void onDestroy() {
+    if (session != null) {
+      // Explicitly close ARCore Session to release native resources.
+      // Review the API reference for important considerations before calling close() in apps with
+      // more complicated lifecycle requirements:
+      // https://developers.google.com/ar/reference/java/arcore/reference/com/google/ar/core/Session#close()
+      session.close();
+      session = null;
+    }
+
+    super.onDestroy();
+  }
+
+  @Override
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
     super.onRequestPermissionsResult(requestCode, permissions, results);
     if (requestCode == PERMISSIONS_REQUEST_CODE) {
